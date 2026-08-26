@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
+            "command": "Set-Location 'c:\\dev\\lam'; $git = 'C:\\Program Files\\Git\\cmd\\git.exe'; $c = & $git status --porcelain 2>$null; if ($c) { & $git add -A; $msg = ((& $git diff --cached --name-only 2>$null | Select-Object -First 3) -join ', '); & $git commit -m ('auto: ' + $msg) 2>$null }"
+          }
+        ]
+      }
+    ]
+  }
+}

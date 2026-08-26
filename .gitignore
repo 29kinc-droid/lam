@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Environment secrets
+.env
+
+# Unrelated project (not part of the LAM codebase — must never be committed here)
+/17.거대행동인긍지능기반디지털트윈요소재구성/

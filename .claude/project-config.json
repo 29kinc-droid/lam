@@ -1,0 +1,6 @@
+{
+  "versionControl": "local",
+  "stopHook": "commit",
+  "docsMode": "docsFirst",
+  "codeOrganization": "strict"
+}

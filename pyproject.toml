@@ -1,0 +1,45 @@
+[project]
+name = "lam"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "29kinc-droid", email = "29kinc@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "neo4j>=6.2.0",
+    "ollama>=0.6.2",
+    "pgvector>=0.5.0",
+    "psycopg[binary]>=3.3.4",
+    "python-dotenv>=1.2.3",
+    "redis>=8.1.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["lam"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: 실제 Ollama/Redis/Postgres/Neo4j 서비스가 떠 있어야 하는 e2e 테스트",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "ruff>=0.16.4",
+]

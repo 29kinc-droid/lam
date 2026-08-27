@@ -16,9 +16,15 @@ from lam.validators.post_exec_validator import validate_citations
 DEFAULT_MAX_ROUNDS = 5
 DEFAULT_RAG_TOP_K = 3
 MAX_VALIDATION_RETRIES = 1
+MAX_EMPTY_RETRIES = 2
+EMPTY_RETRY_FEEDBACK = (
+    "방금 응답이 비어 있었습니다. 지금까지의 대화 맥락을 참고해서 "
+    "실제로 도움이 되는 답변을 다시 작성해줘."
+)
 MAX_ROUNDS_MESSAGE = (
     "죄송합니다, 이 요청은 최대 반복 횟수(max_rounds)를 초과해 처리하지 못했습니다."
 )
+EMPTY_RESPONSE_MESSAGE = "죄송합니다, 지금 응답을 생성하지 못했습니다. 다시 시도해주세요."
 
 
 class ConversationLoop:
@@ -155,6 +161,7 @@ class ConversationLoop:
 
         last_shown = turn_start
         validation_retries = 0
+        empty_retries = 0
         tools_enabled_this_round = True
         for round_index in range(self._max_rounds):
             if self._debug:
@@ -169,6 +176,19 @@ class ConversationLoop:
                 tools=tools_spec if tools_enabled_this_round else None,
             )
             tools_enabled_this_round = True
+
+            if not reply.text.strip() and not reply.tool_calls:
+                if empty_retries < MAX_EMPTY_RETRIES and round_index < self._max_rounds - 1:
+                    empty_retries += 1
+                    self._remember(
+                        Message(
+                            role="tool",
+                            content=EMPTY_RETRY_FEEDBACK,
+                            tool_name="empty_response_retry",
+                        )
+                    )
+                    continue
+                return EMPTY_RESPONSE_MESSAGE
 
             if reply.tool_calls:
                 self._remember(

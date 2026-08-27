@@ -26,6 +26,13 @@ MAX_ROUNDS_MESSAGE = (
 )
 EMPTY_RESPONSE_MESSAGE = "죄송합니다, 지금 응답을 생성하지 못했습니다. 다시 시도해주세요."
 
+PLAN_SYSTEM_PROMPT = (
+    "너는 계획 수립 전용 도우미다. 사용자의 요청에 바로 답하지 말고, 이 요청을 "
+    "처리하려면 어떤 정보가 필요하고 어떤 순서로 처리해야 하는지 번호를 매긴 "
+    "계획으로만 정리해라. 각 단계에서 사용자에게 물어봐야 할 정보가 있으면 "
+    "명시해라. 실제 답이나 계산은 하지 마라."
+)
+
 
 class ConversationLoop:
     def __init__(
@@ -56,6 +63,23 @@ class ConversationLoop:
         self._history: list[Message] = (
             state.load_history(session_id) if state and session_id else []
         )
+        self._plan_text: str | None = None
+
+    def plan(self, user_input: str) -> str:
+        """호출자가 명시적으로 트리거하는 경량 계획 수립. 같은 모델을 계획
+
+        전용 프롬프트로 한 번 호출해서 단계 목록을 얻고, 이후 send() 호출마다
+        시스템 프롬프트에 계속 끼워넣는다. 언제 계획이 필요한지는 자동 판단하지
+        않는다(경량화 — 별도 판단 LLM 호출을 추가하지 않기 위함).
+        """
+        reply = self._client.send(
+            [Message(role="user", content=user_input)], system=PLAN_SYSTEM_PROMPT
+        )
+        self._plan_text = reply.text
+        return self._plan_text
+
+    def clear_plan(self) -> None:
+        self._plan_text = None
 
     def _remember(self, message: Message) -> None:
         self._history.append(message)
@@ -70,6 +94,14 @@ class ConversationLoop:
         self, rag_chunks: list[RetrievedChunk], graph_text: str | None
     ) -> str | None:
         blocks: list[str] = []
+
+        if self._plan_text:
+            blocks.append(
+                "다음은 이 작업을 위해 미리 세워둔 계획이다. 지금까지의 대화를 "
+                "보고 몇 번째 단계까지 왔는지 스스로 판단해서, 그 단계에 필요한 "
+                "정보가 부족하면 사용자에게 물어보고, 충분하면 다음 단계로 "
+                "진행해라:\n" + self._plan_text
+            )
 
         if rag_chunks:
             context = "\n\n".join(f"[{c.source}]\n{c.content}" for c in rag_chunks)

@@ -7,6 +7,10 @@ from ollama import Client
 from lam.config import Settings
 from lam.types import LLMReply, Message, ToolCall
 
+# Ollama 기본 temperature(0.8)는 툴콜링 프롬프트에서 빈 응답/언어 섞임 등
+# 변동성이 커서, 좀 더 일관된 응답을 위해 낮춰서 고정한다.
+DEFAULT_TEMPERATURE = 0.2
+
 
 class OllamaClient:
     def __init__(self, settings: Settings) -> None:
@@ -32,6 +36,7 @@ class OllamaClient:
             model=self._model,
             messages=chat_messages,
             tools=tools or None,
+            options={"temperature": DEFAULT_TEMPERATURE},
         )
         message = response.message
         tool_calls = tuple(

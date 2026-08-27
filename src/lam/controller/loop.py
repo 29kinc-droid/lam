@@ -15,6 +15,7 @@ from lam.validators.post_exec_validator import validate_citations
 
 DEFAULT_MAX_ROUNDS = 5
 DEFAULT_RAG_TOP_K = 3
+MAX_VALIDATION_RETRIES = 1
 MAX_ROUNDS_MESSAGE = (
     "죄송합니다, 이 요청은 최대 반복 횟수(max_rounds)를 초과해 처리하지 못했습니다."
 )
@@ -78,29 +79,46 @@ class ConversationLoop:
         return f"{self._system}\n\n{combined}" if self._system else combined
 
     def _validate_final_response(
-        self, response_text: str, rag_chunks: list[RetrievedChunk]
+        self,
+        response_text: str,
+        rag_chunks: list[RetrievedChunk],
+        graph_text: str | None,
     ) -> list[str]:
-        if not rag_chunks:
+        if not rag_chunks and not graph_text:
             return []
 
         issues = validate_citations(response_text, {c.source for c in rag_chunks})
 
-        evidence = "\n\n".join(c.content for c in rag_chunks)
+        evidence_parts = [c.content for c in rag_chunks]
+        if graph_text:
+            evidence_parts.append(graph_text)
+        evidence_parts.append(
+            "사용 가능한 툴 목록(이 목록에 부합하는 내용은 근거 없는 주장이 아니다):\n"
+            + self._tools.describe()
+        )
+        evidence = "\n\n".join(evidence_parts)
+
         output_issue = validate_output(self._client, response_text, evidence)
         if output_issue:
             issues.append(output_issue)
 
         return issues
 
-    def _debug_print_turn_start(self, user_input: str, system: str | None) -> None:
+    def _debug_print_turn_start(
+        self, user_input: str, system: str | None, tools_desc: str
+    ) -> None:
         print("\n========== [DEBUG] 새 턴 ==========")
         print(f"[사용자 입력]\n{user_input}")
         print(f"\n[이번 턴 시스템 프롬프트 (RAG/그래프 컨텍스트 포함)]\n{system or '(없음)'}")
+        print(f"\n[이번 턴 사용 가능한 툴 스키마 (tools 파라미터)]\n{tools_desc or '(없음)'}")
         print("====================================")
 
-    def _debug_print_round(self, round_index: int, new_messages: list[Message]) -> None:
+    def _debug_print_round(
+        self, round_index: int, new_messages: list[Message], tools_enabled: bool
+    ) -> None:
+        tools_note = "" if tools_enabled else " [이번 호출은 검증 재시도라 툴 비활성화됨]"
         print(
-            f"\n----- [DEBUG] round {round_index + 1}/{self._max_rounds} "
+            f"\n----- [DEBUG] round {round_index + 1}/{self._max_rounds}{tools_note} "
             "(이전 라운드 이후 새로 추가된 메시지) -----"
         )
         if not new_messages:
@@ -130,19 +148,27 @@ class ConversationLoop:
                     f"{t.source} -[{t.label}]-> {t.target}" for t in triples
                 )
         system = self._compose_system(rag_chunks, graph_text)
+        tools_spec = self._tools.spec()
 
         if self._debug:
-            self._debug_print_turn_start(user_input, system)
+            self._debug_print_turn_start(user_input, system, self._tools.describe())
 
         last_shown = turn_start
+        validation_retries = 0
+        tools_enabled_this_round = True
         for round_index in range(self._max_rounds):
             if self._debug:
-                self._debug_print_round(round_index, self._history[last_shown:])
+                self._debug_print_round(
+                    round_index, self._history[last_shown:], tools_enabled_this_round
+                )
                 last_shown = len(self._history)
 
             reply = self._client.send(
-                self._history, system=system, tools=self._tools.spec()
+                self._history,
+                system=system,
+                tools=tools_spec if tools_enabled_this_round else None,
             )
+            tools_enabled_this_round = True
 
             if reply.tool_calls:
                 self._remember(
@@ -159,17 +185,24 @@ class ConversationLoop:
                     )
                 continue
 
-            issues = self._validate_final_response(reply.text, rag_chunks)
-            if issues and round_index < self._max_rounds - 1:
+            issues = self._validate_final_response(reply.text, rag_chunks, graph_text)
+            can_retry = (
+                issues
+                and validation_retries < MAX_VALIDATION_RETRIES
+                and round_index < self._max_rounds - 1
+            )
+            if can_retry:
+                validation_retries += 1
                 self._remember(Message(role="assistant", content=reply.text))
                 feedback = (
                     "검증 결과 다음 문제가 발견되었습니다: "
                     + "; ".join(issues)
-                    + " 이 점을 반영해서 응답을 다시 작성해줘."
+                    + " 새로운 툴을 호출하지 말고, 위 문제를 반영해서 텍스트 답변만 다시 작성해줘."
                 )
                 self._remember(
                     Message(role="tool", content=feedback, tool_name="validator")
                 )
+                tools_enabled_this_round = False
                 continue
 
             self._remember(Message(role="assistant", content=reply.text))

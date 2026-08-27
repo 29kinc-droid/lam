@@ -37,3 +37,10 @@ class ToolRegistry:
             }
             for t in self._tools.values()
         ]
+
+    def describe(self) -> str:
+        lines = []
+        for t in self._tools.values():
+            params = ", ".join(t.parameters.get("properties", {}).keys())
+            lines.append(f"- {t.name}({params}): {t.description}")
+        return "\n".join(lines)

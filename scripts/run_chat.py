@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import io
+import sys
+from typing import cast
+
 from lam.config import load_settings
 from lam.controller.loop import ConversationLoop
 from lam.llm.client import OllamaClient
@@ -17,6 +21,13 @@ SYSTEM_PROMPT = (
 
 
 def main() -> None:
+    # PowerShell 콘솔 코드페이지와 WSL pty 간 인코딩 불일치로 한글 입력이
+    # 깨진 바이트로 들어올 수 있다. 기본 surrogateescape 대신 replace로
+    # 디코딩해서, 잘못된 바이트가 나중에 redis 등에서 strict encode 시
+    # UnicodeEncodeError로 크래시하지 않게 한다.
+    cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="replace")
+    cast(io.TextIOWrapper, sys.stdout).reconfigure(encoding="utf-8", errors="replace")
+
     settings = load_settings()
     client = OllamaClient(settings)
     state = SessionState(settings.redis_url)

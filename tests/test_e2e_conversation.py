@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from lam.config import load_settings
@@ -29,7 +31,7 @@ def test_full_pipeline_calculator_tool_call() -> None:
         client,
         tools,
         system="You are a helpful assistant. Use tools when they help answer the question.",
-        session_id="pytest-e2e",
+        session_id=f"pytest-e2e-{uuid.uuid4()}",
         state=state,
         episodes=episodes,
         rag=rag,

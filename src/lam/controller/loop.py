@@ -92,23 +92,31 @@ class ConversationLoop:
 
         return issues
 
-    def _debug_print(
-        self, round_index: int, system: str | None, messages: list[Message]
-    ) -> None:
-        print(f"\n===== [DEBUG] LLM 호출 (round {round_index + 1}/{self._max_rounds}) =====")
-        print(f"----- system prompt -----\n{system or '(없음)'}")
-        print("----- messages -----")
-        for i, m in enumerate(messages):
+    def _debug_print_turn_start(self, user_input: str, system: str | None) -> None:
+        print("\n========== [DEBUG] 새 턴 ==========")
+        print(f"[사용자 입력]\n{user_input}")
+        print(f"\n[이번 턴 시스템 프롬프트 (RAG/그래프 컨텍스트 포함)]\n{system or '(없음)'}")
+        print("====================================")
+
+    def _debug_print_round(self, round_index: int, new_messages: list[Message]) -> None:
+        print(
+            f"\n----- [DEBUG] round {round_index + 1}/{self._max_rounds} "
+            "(이전 라운드 이후 새로 추가된 메시지) -----"
+        )
+        if not new_messages:
+            print("  (없음 — 턴 시작 직후)")
+        for m in new_messages:
             preview = m.content if len(m.content) <= 500 else m.content[:500] + " ...(truncated)"
             extra = ""
             if m.tool_calls:
                 extra += f" tool_calls={list(m.tool_calls)}"
             if m.tool_name:
                 extra += f" tool_name={m.tool_name}"
-            print(f"  [{i}] {m.role}: {preview}{extra}")
-        print("===== [/DEBUG] =====\n")
+            print(f"  {m.role}: {preview}{extra}")
+        print("---------------------------------------------------\n")
 
     def send(self, user_input: str) -> str:
+        turn_start = len(self._history)
         self._remember(Message(role="user", content=user_input))
 
         rag_chunks = (
@@ -123,9 +131,14 @@ class ConversationLoop:
                 )
         system = self._compose_system(rag_chunks, graph_text)
 
+        if self._debug:
+            self._debug_print_turn_start(user_input, system)
+
+        last_shown = turn_start
         for round_index in range(self._max_rounds):
             if self._debug:
-                self._debug_print(round_index, system, self._history)
+                self._debug_print_round(round_index, self._history[last_shown:])
+                last_shown = len(self._history)
 
             reply = self._client.send(
                 self._history, system=system, tools=self._tools.spec()

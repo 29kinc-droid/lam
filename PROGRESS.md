@@ -34,6 +34,14 @@ last-commit: 90f96e32623c3ad02ea34b8832a5037fd6b22c84
 - **응답 속도 실측**: 입력 컨텍스트 길이가 iGPU 환경에서 응답 속도에 매우 큰 영향을 준다(출력 길이를 고정하고 컨텍스트만 ~1000자 추가 → 2.67초에서 43.66초로, 약 16배 지연). 이에 따라 `rag/chunking.py`의 `DEFAULT_CHUNK_SIZE`를 200→100단어로 축소(`top_k=3`은 유지).
 - 별도로 확인된 점: 검증 재시도가 걸리면 LLM 호출이 2번(때로 그 이상)으로 늘어 총 응답 시간에 청크 크기보다 더 큰 영향을 줌 — 특히 `qwen2.5:7b-instruct`가 과학/전문용어 설명 시 한국어 강제 지시에도 중국어를 섞어 써서 검증기가 이를 잡아내고 재시도가 도는 경우가 있음(모델 자체의 한계, 미해결 — 필요시 정규식 기반 언어 감지로 느린 LLM 검증 없이 빠르게 재시도시키는 방법 검토 가능).
 
+## Windows 네이티브 재이전
+
+- 현재 툴 세트가 읽기 전용(`read_file`, 프로젝트 루트 밖 경로 차단) + 스코프 제한된 그래프 쓰기(`add_entity_relation`)뿐이고 쉘 실행·파일 쓰기/삭제 툴이 없어서, WSL2 Ubuntu 격리가 주는 안전 이득이 거의 없다고 판단. 반면 이 세션 내내 인코딩(PowerShell↔WSL pty), PATH 소싱, `.wslconfig` 미러링 네트워킹 설정 등 마찰 비용은 컸음.
+- 컨트롤러를 Windows 네이티브 Python(uv)으로 재이전: `.venv`를 Linux용에서 Windows용으로 재생성, ruff/mypy/pytest 전부 재확인.
+- WSL Ubuntu-24.04 배포판 완전 제거(`wsl --unregister`), `.wslconfig`(미러링 네트워킹) 삭제로 시스템 설정 원복. Docker Desktop/Ollama는 원래도 Windows 네이티브라 변경 없음 — Docker 컨테이너가 Windows에 포트를 직접 노출하므로 WSL 경유 자체가 불필요해짐.
+- **원칙**: 쉘 실행이나 무제한 파일 쓰기/삭제 같은 위험한 툴을 나중에 추가하게 되면, 그 시점에 격리 방식(VM/컨테이너 샌드박스 등)을 다시 검토한다.
+- **마이그레이션 중 발견한 버그**: Windows 네이티브에서 `psycopg`가 `postgresql://...@localhost:5432/...`로 연결 시 무한정 멈춤(TCP 자체는 `Test-NetConnection`으로 즉시 연결됨에도). 원인은 Windows가 `localhost`를 IPv6(`::1`)부터 시도하는데, Docker Desktop이 `docker ps`에 `[::]:5432->5432/tcp`로 광고는 하지만 실제로는 응답하지 않아 거기서 멈추는 것 — `127.0.0.1`로 바꾸면 0.02초에 즉시 연결됨. `config.py`의 모든 기본 서비스 URL(`OLLAMA_HOST`/`REDIS_URL`/`DATABASE_URL`/`NEO4J_URI`)을 `localhost`→`127.0.0.1`로 변경, `.env.example`도 갱신. 테스트 31개 재통과 확인.
+
 ## 남은 것 / 다음 시작점
 
 - 웹검색 툴 백엔드 미정 (DuckDuckGo 무료 vs 유료 API) — 필요해지면 결정.

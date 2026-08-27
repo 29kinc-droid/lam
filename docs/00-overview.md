@@ -12,7 +12,7 @@
 
 | Phase | 상태 | 비고 |
 |---|---|---|
-| 0. 환경(WSL2 Ubuntu + Docker) | 완료 | |
+| 0. 환경(Windows 네이티브 + Docker) | 완료 | 최초엔 WSL2 Ubuntu로 구성했다가, 툴이 읽기/그래프쓰기로 제한적이라 격리 효용이 낮다고 판단해 Windows 네이티브로 재이전(8단계 참고) |
 | 1. 최소 대화 루프 | 완료 | LLM을 Claude API→Ollama로 전환 |
 | 2. 툴콜링 | 완료 | 계산기, 파일읽기. 웹검색은 백엔드 미정으로 보류 |
 | 3. 상태·에피소드 메모리 | 완료 | Redis(상태), Postgres(에피소드) |
@@ -20,6 +20,7 @@
 | 5. GraphRAG | 완료 | Neo4j, 상세: [`05-graphrag.md`](05-graphrag.md) |
 | 6. 검증기 3종 | 완료 | 상세: [`06-validators.md`](06-validators.md) |
 | 7. 통합 테스트 | 완료 | `tests/` 22개(단위+e2e) 전체 통과, `max_rounds=5` 유지 |
+| 8. Windows 네이티브 재이전 | 완료 | WSL2 Ubuntu 제거, 컨트롤러를 Windows 네이티브 Python으로 이전 |
 
 ## 전체 파이프라인 (실제 구현 기준)
 
@@ -48,22 +49,18 @@ Notion 원안의 "LLM 호출 #1(의도파악+쿼리재작성)"은 프로토타�
    ├── Ollama (LLM 서버, 네이티브 실행) ── http://localhost:11434
    │     ├── qwen2.5:7b-instruct (대화·툴콜링·검증용, 전부 동일 모델)
    │     └── bge-m3 (임베딩)
-   └── Docker Desktop (WSL2 백엔드) ── Redis / Postgres+pgvector / Neo4j
-
-[WSL2 Ubuntu-24.04] ─── /mnt/c/dev/lam 마운트
-        │
-        ▼
-[컨트롤러] ─── 오케스트레이션 루프(파이썬 프로세스, 프레임워크 미사용)
-   ├── LLM 클라이언트 (Ollama HTTP API, WSL 미러링 네트워킹으로 Windows 접근)
-   ├── 툴 레지스트리 — 계산기, 파일읽기, (그래프 저장) add_entity_relation, (보류) 웹검색
-   ├── 상태 저장소 클라이언트 (Redis)
-   ├── 에피소드 저장소 클라이언트 (Postgres)
-   ├── 벡터 검색 클라이언트 (pgvector)
-   ├── 지식그래프 클라이언트 (Neo4j)
-   └── 검증기 (규칙 함수 + 동일 Ollama 모델 재사용 호출)
+   ├── Docker Desktop ── Redis / Postgres+pgvector / Neo4j (모두 localhost 포트로 노출)
+   └── [컨트롤러] ─── 오케스트레이션 루프(파이썬 프로세스, 프레임워크 미사용, Windows 네이티브 uv/venv)
+          ├── LLM 클라이언트 (Ollama HTTP API, 같은 머신 localhost)
+          ├── 툴 레지스트리 — 계산기, 파일읽기, (그래프 저장) add_entity_relation, (보류) 웹검색
+          ├── 상태 저장소 클라이언트 (Redis)
+          ├── 에피소드 저장소 클라이언트 (Postgres)
+          ├── 벡터 검색 클라이언트 (pgvector)
+          ├── 지식그래프 클라이언트 (Neo4j)
+          └── 검증기 (규칙 함수 + 동일 Ollama 모델 재사용 호출)
 ```
 
-LLM(Ollama)과 Docker 컨테이너는 "외부 서비스"로 취급한다 — Ubuntu 안에서 돌리는 건 컨트롤러(에이전트 코드)뿐이다. WSL은 `.wslconfig`에 `networkingMode=mirrored`가 설정되어 있어 `localhost`를 Windows와 공유한다.
+Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다(전부 localhost 포트). **8단계에서 WSL2 Ubuntu를 완전히 제거하고 컨트롤러를 Windows 네이티브로 재이전**했다 — 이유: 툴 세트가 읽기 전용(`read_file`은 프로젝트 루트 밖 경로 차단) + 스코프 제한된 그래프 쓰기(`add_entity_relation`)뿐이고 쉘 실행/파일 쓰기·삭제 툴이 없어서, OS 격리가 주는 안전 이득이 거의 없는데 인코딩·PATH·네트워킹 문제로 마찰 비용만 컸다. **원칙: 쉘 실행이나 무제한 파일 쓰기/삭제 같은 위험한 툴을 추가하게 되면 그때 격리 방식을 다시 검토한다.**
 
 ## 확정된 기술 결정
 
@@ -73,11 +70,11 @@ LLM(Ollama)과 Docker 컨테이너는 "외부 서비스"로 취급한다 — Ubu
 | 툴콜링 방식 | Ollama 네이티브 `tools=` 파라미터 대신 **프롬프트 기반 툴콜링**(ReAct 원조 방식) 사용 — `tools=`가 특정 자기소개성 질문("네 도구 목록 보여줘" 등)과 결합될 때 빈 응답을 내는 모델 버그를 발견해서 우회. 시스템 프롬프트에 툴 설명 + `<tool_call>{...}</tool_call>` 형식 지시를 텍스트로 넣고, `llm/client.py`가 응답을 직접 파싱(닫는 태그 누락·태그 없이 JSON만 내는 경우 등도 관대하게 처리). temperature도 0.8→0.2로 낮춰 변동성 완화 |
 | 임베딩 | `bge-m3` (Ollama) |
 | 검증용 소형 LLM | 메인과 동일 모델(`qwen2.5:7b-instruct`), 프롬프트만 다르게 |
-| 패키지 매니저 | uv (WSL Ubuntu 안에 별도 설치, Windows uv와 별개) |
+| 패키지 매니저 | uv (Windows 네이티브) |
 | Python | 3.12 |
-| 실행 환경 | 컨트롤러/에이전트 코드는 WSL2 Ubuntu-24.04 안에서 실행, LLM·DB는 Windows/Docker Desktop의 외부 서비스로 접근 |
-| 네트워킹 | WSL 미러링 네트워킹(`.wslconfig`) — WSL에서 `http://localhost:11434`(Ollama), Docker 포트를 그대로 접근 |
-| 인프라 실행 | Docker Compose (Redis, Postgres+pgvector, Neo4j), Docker Desktop WSL Integration으로 Ubuntu-24.04에서 `docker`/`docker compose` 사용 |
+| 실행 환경 | 컨트롤러/에이전트 코드는 Windows 네이티브 Python으로 실행. LLM·DB는 같은 머신의 `127.0.0.1` 포트로 접근하는 외부 서비스 (WSL2 Ubuntu는 8단계에서 완전히 제거) |
+| 인프라 실행 | Docker Compose (Redis, Postgres+pgvector, Neo4j), Docker Desktop이 Windows에 포트를 직접 노출 |
+| 서비스 접속 주소 | 모든 기본 URL(`config.py`)에 `localhost` 대신 `127.0.0.1` 사용 — Windows에서 `localhost`는 IPv6(`::1`)부터 시도하는데 Docker Desktop의 IPv6 포트 매핑이 응답하지 않아 연결이 통째로 멈추는 문제를 실측(psycopg 기준 무한 행 vs `127.0.0.1`은 0.02초)해서 발견 |
 | 툴 | 계산기, 파일읽기, `add_entity_relation`(그래프 저장). 웹검색은 백엔드 미정으로 보류 |
 | 그래프 온톨로지 | `Entity{name,type}` 노드 + 고정 `RELATES_TO{label}` 관계 (동적 관계 타입은 인젝션 위험으로 배제). 상세: [`05-graphrag.md`](05-graphrag.md) |
 | pgvector ↔ GraphRAG | 교체 아닌 **병행** — 두 검색 결과를 시스템 프롬프트에 각각 별도 블록으로 첨부 |

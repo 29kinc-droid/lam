@@ -7,12 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+# "localhost"가 아닌 127.0.0.1을 쓴다: Windows에서 "localhost"는 IPv6(::1)로
+# 먼저 시도되는데, Docker Desktop이 광고하는 [::]:PORT 매핑이 실제로는 응답하지
+# 않아 연결이 통째로 멈추는 문제를 겪었다(psycopg에서 실측: 수십 초 이상 행,
+# 127.0.0.1로 바꾸면 즉시 연결).
+DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
 DEFAULT_OLLAMA_MODEL = "qwen2.5:7b-instruct"
-DEFAULT_REDIS_URL = "redis://localhost:6379/0"
-DEFAULT_DATABASE_URL = "postgresql://lam:lam@localhost:5432/lam"
+DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
+DEFAULT_DATABASE_URL = "postgresql://lam:lam@127.0.0.1:5432/lam"
 DEFAULT_SESSION_ID = "default"
-DEFAULT_NEO4J_URI = "bolt://localhost:7687"
+DEFAULT_NEO4J_URI = "bolt://127.0.0.1:7687"
 DEFAULT_NEO4J_USER = "neo4j"
 DEFAULT_NEO4J_PASSWORD = "lam12345"
 DEFAULT_DEBUG = False

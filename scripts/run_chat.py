@@ -21,10 +21,10 @@ SYSTEM_PROMPT = (
 
 
 def main() -> None:
-    # PowerShell 콘솔 코드페이지와 WSL pty 간 인코딩 불일치로 한글 입력이
-    # 깨진 바이트로 들어올 수 있다. 기본 surrogateescape 대신 replace로
-    # 디코딩해서, 잘못된 바이트가 나중에 redis 등에서 strict encode 시
-    # UnicodeEncodeError로 크래시하지 않게 한다.
+    # 터미널 코드페이지가 UTF-8이 아닐 경우 한글 입력이 깨진 바이트로 들어올 수
+    # 있다. 기본 surrogateescape 대신 replace로 디코딩해서, 잘못된 바이트가
+    # 나중에 redis 등에서 strict encode 시 UnicodeEncodeError로 크래시하지
+    # 않게 한다.
     cast(io.TextIOWrapper, sys.stdin).reconfigure(encoding="utf-8", errors="replace")
     cast(io.TextIOWrapper, sys.stdout).reconfigure(encoding="utf-8", errors="replace")
 

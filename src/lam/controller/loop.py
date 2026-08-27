@@ -33,6 +33,7 @@ class ConversationLoop:
         rag: VectorStore | None = None,
         rag_top_k: int = DEFAULT_RAG_TOP_K,
         graph: GraphStore | None = None,
+        debug: bool = False,
     ) -> None:
         self._client = client
         self._tools = tools
@@ -44,6 +45,7 @@ class ConversationLoop:
         self._rag = rag
         self._rag_top_k = rag_top_k
         self._graph = graph
+        self._debug = debug
         self._history: list[Message] = (
             state.load_history(session_id) if state and session_id else []
         )
@@ -90,6 +92,22 @@ class ConversationLoop:
 
         return issues
 
+    def _debug_print(
+        self, round_index: int, system: str | None, messages: list[Message]
+    ) -> None:
+        print(f"\n===== [DEBUG] LLM 호출 (round {round_index + 1}/{self._max_rounds}) =====")
+        print(f"----- system prompt -----\n{system or '(없음)'}")
+        print("----- messages -----")
+        for i, m in enumerate(messages):
+            preview = m.content if len(m.content) <= 500 else m.content[:500] + " ...(truncated)"
+            extra = ""
+            if m.tool_calls:
+                extra += f" tool_calls={list(m.tool_calls)}"
+            if m.tool_name:
+                extra += f" tool_name={m.tool_name}"
+            print(f"  [{i}] {m.role}: {preview}{extra}")
+        print("===== [/DEBUG] =====\n")
+
     def send(self, user_input: str) -> str:
         self._remember(Message(role="user", content=user_input))
 
@@ -106,6 +124,9 @@ class ConversationLoop:
         system = self._compose_system(rag_chunks, graph_text)
 
         for round_index in range(self._max_rounds):
+            if self._debug:
+                self._debug_print(round_index, system, self._history)
+
             reply = self._client.send(
                 self._history, system=system, tools=self._tools.spec()
             )

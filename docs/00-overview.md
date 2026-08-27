@@ -83,6 +83,10 @@ LLM(Ollama)과 Docker 컨테이너는 "외부 서비스"로 취급한다 — Ubu
 | 코드 구조 | 기능별 파일 분리 + type hints 필수 (`strict`) |
 | 버전관리 | git 로컬 저장소 (원격 없음), `c:\dev\lam`에 위치 |
 
+## 디버그 모드
+
+`.env`에 `DEBUG=1`을 설정하면(또는 `DEBUG=1 uv run python scripts/run_chat.py`처럼 실행 시 지정), 매 LLM 호출 직전에 그 시점의 시스템 프롬프트(RAG/그래프 컨텍스트 포함)와 전체 메시지 이력을 콘솔에 그대로 찍는다(`controller/loop.py`의 `_debug_print`). 학습·디버깅용으로, 라운드가 진행될수록 프롬프트/이력이 어떻게 바뀌는지 확인할 때 쓴다.
+
 ## 미확정 — 필요해지면 재확인
 
 - 웹검색 툴의 실제 백엔드 (DuckDuckGo 무료 vs 유료 API) — Phase 2에서 보류 결정

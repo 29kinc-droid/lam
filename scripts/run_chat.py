@@ -35,6 +35,7 @@ def main() -> None:
         episodes=episodes,
         rag=rag,
         graph=graph,
+        debug=settings.debug,
     )
 
     print(f"LAM 프로토타입 대화 시작 (세션: {settings.session_id}, 종료: exit/quit)")

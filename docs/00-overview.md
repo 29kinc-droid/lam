@@ -70,6 +70,7 @@ LLM(Ollama)과 Docker 컨테이너는 "외부 서비스"로 취급한다 — Ubu
 | 항목 | 결정 |
 |---|---|
 | LLM | Ollama(Windows 네이티브 실행), 모델 `qwen2.5:7b-instruct` — Anthropic API는 무료 플랜이 없어 오픈웨이트로 전환 |
+| 툴콜링 방식 | Ollama 네이티브 `tools=` 파라미터 대신 **프롬프트 기반 툴콜링**(ReAct 원조 방식) 사용 — `tools=`가 특정 자기소개성 질문("네 도구 목록 보여줘" 등)과 결합될 때 빈 응답을 내는 모델 버그를 발견해서 우회. 시스템 프롬프트에 툴 설명 + `<tool_call>{...}</tool_call>` 형식 지시를 텍스트로 넣고, `llm/client.py`가 응답을 직접 파싱(닫는 태그 누락·태그 없이 JSON만 내는 경우 등도 관대하게 처리). temperature도 0.8→0.2로 낮춰 변동성 완화 |
 | 임베딩 | `bge-m3` (Ollama) |
 | 검증용 소형 LLM | 메인과 동일 모델(`qwen2.5:7b-instruct`), 프롬프트만 다르게 |
 | 패키지 매니저 | uv (WSL Ubuntu 안에 별도 설치, Windows uv와 별개) |

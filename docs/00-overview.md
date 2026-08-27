@@ -81,7 +81,7 @@ Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다
 | pgvector 관련성 임계값 | 코사인 거리 `< 0.58`만 채택(`rag/vector_store.py`). 원래 top-k만으로 걸러서 무관한 질문(예: "3+4는?")에도 문서가 매번 끼어드는 문제가 있어 실측 후 추가 |
 | RAG 청크 크기 | `chunk_size=100`, `overlap=15`(단어 기준, `rag/chunking.py`) — iGPU(Vulkan) 환경은 입력 컨텍스트 길이에 매우 민감(실측: ~1000자 추가만으로 응답 16배 지연)해서 200→100으로 축소. `top_k=3`은 유지 |
 | 코드 구조 | 기능별 파일 분리 + type hints 필수 (`strict`) |
-| 버전관리 | git 로컬 저장소 (원격 없음), `c:\dev\lam`에 위치 |
+| 버전관리 | git, GitHub 원격 [`29kinc-droid/lam`](https://github.com/29kinc-droid/lam)(공개), `c:\dev\lam`에 위치. Stop 훅은 로컬 커밋만 하고 자동 푸시는 안 함 |
 
 ## 디버그 모드
 

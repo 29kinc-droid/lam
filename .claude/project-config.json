@@ -1,5 +1,5 @@
 {
-  "versionControl": "local",
+  "versionControl": "github",
   "stopHook": "commit",
   "docsMode": "docsFirst",
   "codeOrganization": "strict"

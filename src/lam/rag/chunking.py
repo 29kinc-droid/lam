@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-DEFAULT_CHUNK_SIZE = 200
-DEFAULT_OVERLAP = 30
+# iGPU(Vulkan) 환경에서는 입력 컨텍스트 길이가 응답 속도에 큰 영향을 준다(실측:
+# ~1000자 추가만으로 16배 지연). top_k(=3)는 유지하되 청크를 작게 잘라서
+# 한 번에 딸려오는 총 텍스트량을 줄인다.
+DEFAULT_CHUNK_SIZE = 100
+DEFAULT_OVERLAP = 15
 
 
 def chunk_text(

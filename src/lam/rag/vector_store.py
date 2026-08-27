@@ -22,13 +22,21 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
 INSERT_SQL = "INSERT INTO knowledge_chunks (source, content, embedding) VALUES (%s, %s, %s);"
 SEARCH_SQL = """
 SELECT source, content
-FROM knowledge_chunks
-ORDER BY embedding <=> %s
+FROM (
+    SELECT source, content, embedding <=> %s AS distance
+    FROM knowledge_chunks
+) ranked
+WHERE distance < %s
+ORDER BY distance
 LIMIT %s;
 """
 DELETE_BY_SOURCE_SQL = "DELETE FROM knowledge_chunks WHERE source = %s;"
 
 DEFAULT_TOP_K = 3
+# pgvector `<=>`는 코사인 거리(0=완전 일치, 1=무관, 2=반대)를 반환한다. bge-m3 기준
+# 실측: 관련 있는 질의는 ~0.29~0.56, 무관한 질의는 ~0.61~0.71로 나타나 그 사이인
+# 0.58을 기본 임계값으로 둔다(문서/임베딩 모델이 바뀌면 재보정 필요).
+DEFAULT_MAX_DISTANCE = 0.58
 
 
 @dataclass(frozen=True)
@@ -60,9 +68,16 @@ class VectorStore:
                 conn.execute(INSERT_SQL, (source, chunk, embedding))
             conn.commit()
 
-    def search(self, query: str, top_k: int = DEFAULT_TOP_K) -> list[RetrievedChunk]:
+    def search(
+        self,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        max_distance: float = DEFAULT_MAX_DISTANCE,
+    ) -> list[RetrievedChunk]:
         embedding = self._embed(query)
         with psycopg.connect(self._dsn) as conn:
             register_vector(conn)
-            rows = conn.execute(SEARCH_SQL, (embedding, top_k)).fetchall()
+            rows = conn.execute(
+                SEARCH_SQL, (embedding, max_distance, top_k)
+            ).fetchall()
         return [RetrievedChunk(source=row[0], content=row[1]) for row in rows]

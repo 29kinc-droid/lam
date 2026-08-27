@@ -32,5 +32,10 @@ def validate_tool_call(tool: Tool, call: ToolCall) -> list[str]:
         expected = _TYPE_MAP.get(prop.get("type", ""))
         if expected and not isinstance(value, expected):
             errors.append(f"'{name}'의 타입이 올바르지 않습니다 (기대: {prop.get('type')})")
+            continue
+
+        allowed = prop.get("enum")
+        if allowed is not None and value not in allowed:
+            errors.append(f"'{name}'의 값 '{value}'은 허용된 목록에 없습니다: {allowed}")
 
     return errors

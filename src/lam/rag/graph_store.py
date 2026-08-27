@@ -28,7 +28,7 @@ MERGE (a:Entity {name: $source_name})
   ON CREATE SET a.type = $source_type
 MERGE (b:Entity {name: $target_name})
   ON CREATE SET b.type = $target_type
-MERGE (a)-[:RELATES_TO {label: $relation}]->(b)
+MERGE (a)-[:RELATES_TO {label: $relation, wikidata_pid: $wikidata_pid}]->(b)
 """
 
 
@@ -80,6 +80,7 @@ class GraphStore:
         target_name: str,
         target_type: str,
         relation: str,
+        wikidata_pid: str | None = None,
     ) -> None:
         with self._driver.session() as session:
             session.run(
@@ -89,4 +90,5 @@ class GraphStore:
                 target_name=target_name,
                 target_type=target_type,
                 relation=relation,
+                wikidata_pid=wikidata_pid,
             )

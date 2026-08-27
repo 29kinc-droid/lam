@@ -76,7 +76,7 @@ Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다
 | 인프라 실행 | Docker Compose (Redis, Postgres+pgvector, Neo4j), Docker Desktop이 Windows에 포트를 직접 노출 |
 | 서비스 접속 주소 | 모든 기본 URL(`config.py`)에 `localhost` 대신 `127.0.0.1` 사용 — Windows에서 `localhost`는 IPv6(`::1`)부터 시도하는데 Docker Desktop의 IPv6 포트 매핑이 응답하지 않아 연결이 통째로 멈추는 문제를 실측(psycopg 기준 무한 행 vs `127.0.0.1`은 0.02초)해서 발견 |
 | 툴 | 계산기, 파일읽기, `add_entity_relation`(그래프 저장). 웹검색은 백엔드 미정으로 보류 |
-| 그래프 온톨로지 | `Entity{name,type}` 노드 + 고정 `RELATES_TO{label}` 관계 (동적 관계 타입은 인젝션 위험으로 배제). 상세: [`05-graphrag.md`](05-graphrag.md) |
+| 그래프 온톨로지 | `Entity{name,type}` 노드 + 고정 `RELATES_TO{label,wikidata_pid}` 관계 (동적 관계 타입은 인젝션 위험으로 배제). `relation`은 Wikidata P번호 기반 16개 한국어 어휘로 enum 강제(`rag/relation_vocabulary.py`). 상세: [`05-graphrag.md`](05-graphrag.md) |
 | pgvector ↔ GraphRAG | 교체 아닌 **병행** — 두 검색 결과를 시스템 프롬프트에 각각 별도 블록으로 첨부 |
 | pgvector 관련성 임계값 | 코사인 거리 `< 0.58`만 채택(`rag/vector_store.py`). 원래 top-k만으로 걸러서 무관한 질문(예: "3+4는?")에도 문서가 매번 끼어드는 문제가 있어 실측 후 추가 |
 | RAG 청크 크기 | `chunk_size=100`, `overlap=15`(단어 기준, `rag/chunking.py`) — iGPU(Vulkan) 환경은 입력 컨텍스트 길이에 매우 민감(실측: ~1000자 추가만으로 응답 16배 지연)해서 200→100으로 축소. `top_k=3`은 유지 |

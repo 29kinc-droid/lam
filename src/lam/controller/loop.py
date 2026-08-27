@@ -221,5 +221,5 @@ class ConversationLoop:
 
         try:
             return str(self._tools.call(name, arguments))
-        except ValueError as exc:
+        except Exception as exc:  # noqa: BLE001 - 툴 인자는 LLM이 준 신뢰 불가 입력
             return f"오류: {exc}"

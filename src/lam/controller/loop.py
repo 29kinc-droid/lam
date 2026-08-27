@@ -89,6 +89,7 @@ class ConversationLoop:
         response_text: str,
         rag_chunks: list[RetrievedChunk],
         graph_text: str | None,
+        user_input: str,
     ) -> list[str]:
         if not rag_chunks and not graph_text:
             return []
@@ -101,6 +102,10 @@ class ConversationLoop:
         evidence_parts.append(
             "사용 가능한 툴 목록(이 목록에 부합하는 내용은 근거 없는 주장이 아니다):\n"
             + self._tools.describe()
+        )
+        evidence_parts.append(
+            "사용자가 이번 턴에 직접 말한 내용(이걸 재진술·요약·정리하는 것은 "
+            "근거 없는 주장이 아니다):\n" + user_input
         )
         evidence = "\n\n".join(evidence_parts)
 
@@ -205,7 +210,9 @@ class ConversationLoop:
                     )
                 continue
 
-            issues = self._validate_final_response(reply.text, rag_chunks, graph_text)
+            issues = self._validate_final_response(
+                reply.text, rag_chunks, graph_text, user_input
+            )
             can_retry = (
                 issues
                 and validation_retries < MAX_VALIDATION_RETRIES

@@ -68,6 +68,10 @@ class OllamaClient:
             model=self._model,
             messages=chat_messages,
             options={"temperature": DEFAULT_TEMPERATURE},
+            # thinking을 지원하는 모델(예: qwen3)은 기본적으로 thinking이 켜져서
+            # 숨은 추론 토큰을 잔뜩 생성한다 — 이 iGPU 환경에서 실측 4배(58초→
+            # 14초) 차이가 나서 명시적으로 끈다. thinking 미지원 모델에는 무시됨.
+            think=False,
         )
         raw_text = response.message.content or ""
         tool_calls, remaining_text = _parse_tool_calls(raw_text)

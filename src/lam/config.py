@@ -12,7 +12,11 @@ load_dotenv()
 # 않아 연결이 통째로 멈추는 문제를 겪었다(psycopg에서 실측: 수십 초 이상 행,
 # 127.0.0.1로 바꾸면 즉시 연결).
 DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
-DEFAULT_OLLAMA_MODEL = "qwen2.5:7b-instruct"
+# qwen2.5:7b-instruct는 특정 자기소개성 질문+tools= 조합에서 100% 빈 응답을
+# 내는 버그가 있었다(llm/client.py 참고). qwen3:8b는 같은 시나리오+2026-08
+# 기준 외부 벤치마크(Berkeley BFCL 등)에서도 이 체급 툴콜링 신뢰도가 더
+# 낫다고 확인돼서 교체.
+DEFAULT_OLLAMA_MODEL = "qwen3:8b"
 DEFAULT_REDIS_URL = "redis://127.0.0.1:6379/0"
 DEFAULT_DATABASE_URL = "postgresql://lam:lam@127.0.0.1:5432/lam"
 DEFAULT_SESSION_ID = "default"

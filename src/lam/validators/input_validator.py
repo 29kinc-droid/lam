@@ -36,6 +36,12 @@ def validate_tool_call(tool: Tool, call: ToolCall) -> list[str]:
 
         allowed = prop.get("enum")
         if allowed is not None and value not in allowed:
-            errors.append(f"'{name}'의 값 '{value}'은 허용된 목록에 없습니다: {allowed}")
+            # 대괄호를 쓰면 응답 텍스트에 이 오류 메시지가 인용될 때 인용검증기의
+            # "[출처명]" 패턴과 충돌하므로(실제로 한 번 발생) 괄호를 쓰지 않는다.
+            allowed_text = ", ".join(str(a) for a in allowed)
+            errors.append(
+                f"'{name}'의 값 '{value}'은 허용된 목록에 없습니다 "
+                f"(가능한 값: {allowed_text})"
+            )
 
     return errors

@@ -81,6 +81,8 @@ Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다
 | pgvector 관련성 임계값 | 코사인 거리 `< 0.58`만 채택(`rag/vector_store.py`). 원래 top-k만으로 걸러서 무관한 질문(예: "3+4는?")에도 문서가 매번 끼어드는 문제가 있어 실측 후 추가 |
 | RAG 청크 크기 | `chunk_size=100`, `overlap=15`(단어 기준, `rag/chunking.py`) — iGPU(Vulkan) 환경은 입력 컨텍스트 길이에 매우 민감(실측: ~1000자 추가만으로 응답 16배 지연)해서 200→100으로 축소. `top_k=3`은 유지 |
 | 빈 응답 재시도 | `qwen2.5:7b-instruct`가 텍스트도 tool_calls도 없는 완전 빈 응답을 내는 경우가 있어(특정 질문+파라미터 조합에서 재현), 빈 응답이면 피드백 메시지와 함께 최대 2회 자동 재시도(`MAX_EMPTY_RETRIES`, `controller/loop.py`). 그래도 안 되면 `EMPTY_RESPONSE_MESSAGE` 반환 |
+| 검증기 evidence 범위 | RAG/그래프 검색 결과 + 툴 스키마 + **이번 턴 사용자 입력 원문**을 모두 근거로 포함(`_validate_final_response`) — 사용자가 방금 한 말을 재진술한 답이 "근거 없는 주장"으로 오탐되는 문제를 막기 위함 |
+| 대괄호 사용 금지 규칙 | 응답 텍스트에 노출될 수 있는 문자열(툴 파라미터 타입 표기, enum 오류 메시지 등)에는 대괄호 `[...]`를 쓰지 않는다 — `[출처명]` 인용 규칙과 충돌해서 인용검증기가 오탐하는 걸 두 번 겪은 뒤 확립한 규칙 |
 | 코드 구조 | 기능별 파일 분리 + type hints 필수 (`strict`) |
 | 버전관리 | git, GitHub 원격 [`29kinc-droid/lam`](https://github.com/29kinc-droid/lam)(공개), `c:\dev\lam`에 위치. Stop 훅은 로컬 커밋만 하고 자동 푸시는 안 함 |
 

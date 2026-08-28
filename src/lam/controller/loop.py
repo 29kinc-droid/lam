@@ -152,7 +152,7 @@ class ConversationLoop:
     ) -> None:
         print("\n========== [DEBUG] 새 턴 ==========")
         print(f"[사용자 입력]\n{user_input}")
-        print(f"\n[이번 턴 시스템 프롬프트 (RAG/그래프 컨텍스트 포함)]\n{system or '(없음)'}")
+        print(f"\n[이번 턴 시스템 프롬프트 (계획/RAG/그래프 컨텍스트 포함)]\n{system or '(없음)'}")
         print(f"\n[이번 턴 사용 가능한 툴 스키마 (tools 파라미터)]\n{tools_desc or '(없음)'}")
         print("====================================")
 

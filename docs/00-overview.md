@@ -21,6 +21,7 @@
 | 6. 검증기 3종 | 완료 | 상세: [`06-validators.md`](06-validators.md) |
 | 7. 통합 테스트 | 완료 | `tests/` 22개(단위+e2e) 전체 통과, `max_rounds=5` 유지 |
 | 8. Windows 네이티브 재이전 | 완료 | WSL2 Ubuntu 제거, 컨트롤러를 Windows 네이티브 Python으로 이전 |
+| 9. 모델 교체 + 경량 계획 단계 | 완료 | LLM을 `qwen3:8b`로 교체, `ConversationLoop.plan()`으로 호출자가 트리거하는 경량 계획 수립 추가 |
 
 ## 전체 파이프라인 (실제 구현 기준)
 
@@ -66,10 +67,12 @@ Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다
 
 | 항목 | 결정 |
 |---|---|
-| LLM | Ollama(Windows 네이티브 실행), 모델 `qwen2.5:7b-instruct` — Anthropic API는 무료 플랜이 없어 오픈웨이트로 전환 |
-| 툴콜링 방식 | Ollama 네이티브 `tools=` 파라미터 대신 **프롬프트 기반 툴콜링**(ReAct 원조 방식) 사용 — `tools=`가 특정 자기소개성 질문("네 도구 목록 보여줘" 등)과 결합될 때 빈 응답을 내는 모델 버그를 발견해서 우회. 시스템 프롬프트에 툴 설명 + `<tool_call>{...}</tool_call>` 형식 지시를 텍스트로 넣고, `llm/client.py`가 응답을 직접 파싱(닫는 태그 누락·태그 없이 JSON만 내는 경우 등도 관대하게 처리). temperature도 0.8→0.2로 낮춰 변동성 완화 |
+| LLM | Ollama(Windows 네이티브 실행), 모델 `qwen3:8b` — Anthropic API는 무료 플랜이 없어 오픈웨이트로 전환. 처음엔 `qwen2.5:7b-instruct`였으나 특정 질문+`tools=` 조합에서 100% 빈 응답 내는 버그가 있어 2026-08 기준 외부 벤치마크(Berkeley BFCL 등)에서도 이 체급 툴콜링 신뢰도가 더 높다고 확인된 `qwen3:8b`로 교체 |
+| thinking 모드 | `qwen3:8b`는 thinking을 지원하는데 기본값이 켜져있으면 숨은 추론 토큰을 많이 생성해서 이 iGPU에서 실측 4배(58초→14초) 느려짐 → `llm/client.py`에서 `think=False`로 명시적으로 끔 |
+| 툴콜링 방식 | Ollama 네이티브 `tools=` 파라미터 대신 **프롬프트 기반 툴콜링**(ReAct 원조 방식) 사용 — 원래 `qwen2.5:7b-instruct`가 특정 자기소개성 질문("네 도구 목록 보여줘" 등)과 `tools=` 조합에서 빈 응답을 내는 버그가 있어 우회한 설계. 시스템 프롬프트에 툴 설명 + `<tool_call>{...}</tool_call>` 형식 지시를 텍스트로 넣고, `llm/client.py`가 응답을 직접 파싱(닫는 태그 누락·태그 없이 JSON만 내는 경우 등도 관대하게 처리). temperature도 0.8→0.2로 낮춰 변동성 완화. `qwen3:8b`의 네이티브 `tools=`는 위 버그가 없는 것으로 보이지만(제한적 테스트), 아직 이 프롬프트 기반 구조를 유지 중 |
 | 임베딩 | `bge-m3` (Ollama) |
-| 검증용 소형 LLM | 메인과 동일 모델(`qwen2.5:7b-instruct`), 프롬프트만 다르게 |
+| 검증용 소형 LLM | 메인과 동일 모델(`qwen3:8b`), 프롬프트만 다르게 |
+| 경량 계획 단계 | `ConversationLoop.plan(user_input)`을 호출자가 명시적으로 트리거(자동 판단 없음 — 별도 LLM 호출 최소화 목적)해서 단계별 계획을 얻고, `self._plan_text`로 저장 후 매 턴 시스템 프롬프트에 포함시켜 모델이 스스로 진행 단계를 추적하게 함. 단계별 검증 LLM 호출 없는 경량판 — 슬롯필링(부족한 정보 되묻기)엔 잘 동작하나, 실제 세율 같은 도메인 지식 없이 계산까지 시키면 근거 없는 수치로 암산하는 문제가 그대로 남음(RAG 문서·전용 계산 툴 필요, 아직 미구현) |
 | 패키지 매니저 | uv (Windows 네이티브) |
 | Python | 3.12 |
 | 실행 환경 | 컨트롤러/에이전트 코드는 Windows 네이티브 Python으로 실행. LLM·DB는 같은 머신의 `127.0.0.1` 포트로 접근하는 외부 서비스 (WSL2 Ubuntu는 8단계에서 완전히 제거) |
@@ -80,7 +83,7 @@ Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다
 | pgvector ↔ GraphRAG | 교체 아닌 **병행** — 두 검색 결과를 시스템 프롬프트에 각각 별도 블록으로 첨부 |
 | pgvector 관련성 임계값 | 코사인 거리 `< 0.58`만 채택(`rag/vector_store.py`). 원래 top-k만으로 걸러서 무관한 질문(예: "3+4는?")에도 문서가 매번 끼어드는 문제가 있어 실측 후 추가 |
 | RAG 청크 크기 | `chunk_size=100`, `overlap=15`(단어 기준, `rag/chunking.py`) — iGPU(Vulkan) 환경은 입력 컨텍스트 길이에 매우 민감(실측: ~1000자 추가만으로 응답 16배 지연)해서 200→100으로 축소. `top_k=3`은 유지 |
-| 빈 응답 재시도 | `qwen2.5:7b-instruct`가 텍스트도 tool_calls도 없는 완전 빈 응답을 내는 경우가 있어(특정 질문+파라미터 조합에서 재현), 빈 응답이면 피드백 메시지와 함께 최대 2회 자동 재시도(`MAX_EMPTY_RETRIES`, `controller/loop.py`). 그래도 안 되면 `EMPTY_RESPONSE_MESSAGE` 반환 |
+| 빈 응답 재시도 | 텍스트도 tool_calls도 없는 완전 빈 응답이 나올 수 있어(`qwen2.5:7b-instruct`에서 재현된 문제, `qwen3:8b` 교체 후에도 안전장치로 유지), 빈 응답이면 피드백 메시지와 함께 최대 2회 자동 재시도(`MAX_EMPTY_RETRIES`, `controller/loop.py`). 그래도 안 되면 `EMPTY_RESPONSE_MESSAGE` 반환 |
 | 검증기 evidence 범위 | RAG/그래프 검색 결과 + 툴 스키마 + **이번 턴 사용자 입력 원문**을 모두 근거로 포함(`_validate_final_response`) — 사용자가 방금 한 말을 재진술한 답이 "근거 없는 주장"으로 오탐되는 문제를 막기 위함 |
 | 대괄호 사용 금지 규칙 | 응답 텍스트에 노출될 수 있는 문자열(툴 파라미터 타입 표기, enum 오류 메시지 등)에는 대괄호 `[...]`를 쓰지 않는다 — `[출처명]` 인용 규칙과 충돌해서 인용검증기가 오탐하는 걸 두 번 겪은 뒤 확립한 규칙 |
 | 코드 구조 | 기능별 파일 분리 + type hints 필수 (`strict`) |
@@ -88,12 +91,13 @@ Ollama와 Docker 컨테이너는 컨트롤러 입장에서 "외부 서비스"다
 
 ## 디버그 모드
 
-`.env`에 `DEBUG=1`을 설정하면(또는 `DEBUG=1 uv run python scripts/run_chat.py`처럼 실행 시 지정), 매 LLM 호출 직전에 그 시점의 시스템 프롬프트(RAG/그래프 컨텍스트 포함)와 전체 메시지 이력을 콘솔에 그대로 찍는다(`controller/loop.py`의 `_debug_print`). 학습·디버깅용으로, 라운드가 진행될수록 프롬프트/이력이 어떻게 바뀌는지 확인할 때 쓴다.
+`.env`에 `DEBUG=1`을 설정하면(또는 `DEBUG=1 uv run python scripts/run_chat.py`처럼 실행 시 지정), 매 LLM 호출 직전에 그 시점의 시스템 프롬프트(계획/RAG/그래프 컨텍스트 포함)와 전체 메시지 이력을 콘솔에 그대로 찍는다(`controller/loop.py`의 `_debug_print_turn_start`/`_debug_print_round`). 학습·디버깅용으로, 라운드가 진행될수록 프롬프트/이력이 어떻게 바뀌는지 확인할 때 쓴다.
 
 ## 미확정 — 필요해지면 재확인
 
 - 웹검색 툴의 실제 백엔드 (DuckDuckGo 무료 vs 유료 API) — Phase 2에서 보류 결정
 - pgvector/그래프 초기 코퍼스가 지금은 테스트용 샘플(`docs/knowledge/`, 수동으로 넣은 사실 몇 개)뿐 — 실 데이터 소스는 미정
+- 결과가 중요한 도메인(세금 계산 등)은 규칙 RAG 문서 + 전용 계산 툴이 필요하다고 확인됐으나 미구현 — 지금은 경량 계획 단계까지만 있고, 실제 계산은 모델이 근거 없이 암산함
 
 ## 구현 로드맵
 
